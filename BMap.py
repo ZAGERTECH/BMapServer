@@ -22,7 +22,7 @@ def get_latest_history_safe() -> List[RoutineBMapData]:
     Args:
         None
     Returns:
-        List[RoutineBMapData]: 返回历史数据的深拷贝列表。
+        List[RoutineBMapData]: 返回历史数据的浅拷贝列表。
                                如果无数据则返回空列表。
     """
     snapshot = []
@@ -150,6 +150,7 @@ class TrafficManager:
 
             except Exception as e:
                 retry_count += 1
+                print(f"[Error] 获取交通状态失败 (Seg {seg.id}): {e}")
 
         return -2, -2, "{}"
 
@@ -186,8 +187,9 @@ class TrafficManager:
 
             except Exception as e:
                 retry_count += 1
+                print(f"[Error] 获取路径规划失败 (Seg {seg.id}): {e}")
 
-        return 0.0, "{}"
+        return -2.0, "{}"
 
     def save_result(self, result: TrafficResult) -> None:
         """将单次查询结果写入 CSV 和 JSON 日志文件。
