@@ -151,7 +151,7 @@ class TrafficManager:
             except Exception as e:
                 retry_count += 1
 
-        return 0, 0, "{}"
+        return -2, -2, "{}"
 
     def fetch_route_speed(self, seg: RoadSegment) -> Tuple[float, str]:
         """调用百度 API 获取路径规划数据，并计算平均车速。
