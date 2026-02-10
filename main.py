@@ -1,12 +1,10 @@
 import threading
-import time
-import requests
-from ApiSchedule import traffic_monitor_task, TrafficTaskConfig
-from datetime import datetime, time as dt_time
+from ApiSchedule import traffic_monitor_task, TrafficTaskConfig, traffic_monitor_task_end_event
+from datetime import time as dt_time
 
 def debug():
     print("Debugging BMapServer...")
-
+    traffic_monitor_task_end_event.set()  # 确保线程可以正常运行
     traffic_monitor_thread = threading.Thread(target=traffic_monitor_task, args=(myConfig, ), daemon=True)
     traffic_monitor_thread.start()
     print("Traffic monitor thread started.")
