@@ -34,7 +34,7 @@ def is_current_in_schedule(config: TrafficTaskConfig) -> bool:
         # 处理跨天情况
         return now_time >= config.start_time or now_time <= config.end_time
 
-# 线程控制事件，允许外部信号来停止线程 traffic_monitor_task_end_event.set() 来停止线程，
+# 线程控制事件，允许外部信号来停止线程
 traffic_monitor_task_end_event = threading.Event()
 
 def traffic_monitor_task(taskConfig: TrafficTaskConfig):
