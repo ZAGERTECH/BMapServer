@@ -4,6 +4,9 @@ from dataclasses import dataclass
 import time
 from datetime import datetime, time as dt_time
 
+from BMap import TrafficManager
+
+
 @dataclass
 class TrafficTaskConfig:
     """
@@ -12,8 +15,6 @@ class TrafficTaskConfig:
     start_time: dt_time      # 开始时间 (例如 9:00)
     end_time: dt_time        # 结束时间 (例如 18:00)
     interval_seconds: int    # 时段内的轮询间隔 (秒)
-    api_url: str             # API 地址
-    api_ak: str              # 百度 AK
     segment_table_path: str  # 路段数据文件路径
 
 
@@ -45,16 +46,30 @@ def traffic_monitor_task(taskConfig: TrafficTaskConfig):
     START_TIME = taskConfig.start_time
     END_TIME = taskConfig.end_time
 
+    # 构造TrafficManager对象
+    TrafficManagerObj = TrafficManager(config_file=taskConfig.segment_table_path)
+
+    # 用于记录当前正在运行的子线程，初始为空
+    current_worker_thread: threading.Thread = None
 
     print(f"线程启动，计划时段: {START_TIME} - {END_TIME}")
 
     while traffic_monitor_task_end_event.is_set():
         try:
             if is_current_in_schedule(taskConfig):
-                # 在时段内：调用 API
-                print("当前在时段内，调用百度API...")
+                # 检查上一个子线程是否还在运行
+                if current_worker_thread is not None and current_worker_thread.is_alive():
+                    print(f"[{datetime.now()}] 警告：上一轮任务尚未结束，跳过本次调度！")
+                else:
+                    print(f"[{datetime.now()}] 启动子线程执行 API 查询...")
 
-                print(f"[{datetime.now()}] 进等待...\n")
+                    # 创建并启动子线程
+                    # target 指向你要执行的那个函数
+                    current_worker_thread = threading.Thread(
+                        target=TrafficManagerObj.task_query_all_segments,
+                        daemon=True  # 设置为守护线程，主程序退出它也退
+                    )
+                    current_worker_thread.start()
 
                 counter = 0
 

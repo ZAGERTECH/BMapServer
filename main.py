@@ -1,5 +1,5 @@
 import threading
-from ApiSchedule import traffic_monitor_task, TrafficTaskConfig, traffic_monitor_task_end_event
+from TimeSchedule import traffic_monitor_task, TrafficTaskConfig, traffic_monitor_task_end_event
 from datetime import time as dt_time
 
 def debug():
@@ -23,9 +23,7 @@ if __name__ == '__main__':
     myConfig = TrafficTaskConfig(
         start_time=dt_time(0, 0),
         end_time=dt_time(23, 59),
-        interval_seconds=300,
-        api_url="",
-        api_ak="",
-        segment_table_path="")
+        interval_seconds=30,
+        segment_table_path="road_segment.csv")
 
     main()
