@@ -1,5 +1,5 @@
 import threading
-from datetime import time, datetime
+from datetime import time, datetime, timedelta
 from dataclasses import dataclass
 import time
 from datetime import datetime, time as dt_time
@@ -38,54 +38,67 @@ def is_current_in_schedule(config: TrafficTaskConfig) -> bool:
 # 线程控制事件，允许外部信号来停止线程
 traffic_monitor_task_end_event = threading.Event()
 
+
 def traffic_monitor_task(taskConfig: TrafficTaskConfig):
-    """
-    后台工作线程：在指定时间段内轮询百度 API。
-    """
-
-    START_TIME = taskConfig.start_time
-    END_TIME = taskConfig.end_time
-
-    # 构造TrafficManager对象
     TrafficManagerObj = TrafficManager(config_file=taskConfig.segment_table_path)
+    current_worker_thread = None
 
-    # 用于记录当前正在运行的子线程，初始为空
-    current_worker_thread: threading.Thread = None
+    interval = taskConfig.interval_seconds
 
-    print(f"线程启动，计划时段: {START_TIME} - {END_TIME}")
+    # 第一次启动时，对齐到整点 (例如 00, 05, 10 分) ---
+    # 这里的逻辑是：找到当前时间之后的第一个“整刻度”
+    now = datetime.now()
+    # 计算从当天0点开始过了多少秒
+    seconds_since_midnight = (now - now.replace(hour=0, minute=0, second=0, microsecond=0)).total_seconds()
+    # 计算距离下一个整刻度还要多久
+    seconds_to_wait = interval - (seconds_since_midnight % interval)
+    # 设定刚性的下一次运行时间
+    next_run_time = now + timedelta(seconds=seconds_to_wait)
+
+    print(f"线程启动，首次对齐时间: {next_run_time.strftime('%H:%M:%S')}")
 
     while traffic_monitor_task_end_event.is_set():
         try:
+            # 检查是否在允许的时间段内
             if is_current_in_schedule(taskConfig):
-                # 检查上一个子线程是否还在运行
-                if current_worker_thread is not None and current_worker_thread.is_alive():
-                    print(f"[{datetime.now()}] 警告：上一轮任务尚未结束，跳过本次调度！")
-                else:
-                    print(f"[{datetime.now()}] 启动子线程执行 API 查询...")
 
-                    # 创建并启动子线程
-                    # target 指向你要执行的那个函数
-                    current_worker_thread = threading.Thread(
-                        target=TrafficManagerObj.task_query_all_segments,
-                        daemon=True  # 设置为守护线程，主程序退出它也退
-                    )
+
+                if current_worker_thread is not None and current_worker_thread.is_alive():
+                    print(f"警告：上一轮任务未结束")
+                else:
+                    # 启动线程...
+                    current_worker_thread = threading.Thread(target=TrafficManagerObj.task_query_all_segments,
+                                                             daemon=True)
                     current_worker_thread.start()
 
-                counter = 0
+                # 无论当前耗时多久，强制在这个基准上加间隔
+                next_run_time += timedelta(seconds=interval)
 
-                while counter < taskConfig.interval_seconds:
-                    print(f"距离下一次调用还有 {taskConfig.interval_seconds - counter} 秒...", end='\r')
-                    time.sleep(1)
-                    counter += 1
+                # 倒计时逻辑
+                while True:
+                    now = datetime.now()
+                    sleep_seconds = (next_run_time - now).total_seconds()
+
+                    if sleep_seconds <= 0:
+                        break  # 时间到了，跳出等待循环，去执行任务
+
+                    # 打印倒计时并睡眠
+                    print(f"距离下一次调用({next_run_time.strftime('%H:%M:%S')})还有 {int(sleep_seconds)} 秒...",
+                          end='\n')
+                    # 动态睡眠：如果在最后1秒内，就睡得短一点，提高精度
+                    time.sleep(min(1, sleep_seconds))
 
             else:
-                # 不在时段内：每秒查询一次时间
-                print(f"当前不在时段内，1秒后重试...", end='\r') # 打印太多会刷屏，可以注释掉
+                # 不在时段内，休眠并重新计算下一次整点
                 time.sleep(1)
+                # 重新对齐 next_run_time，确保进入时间段的第一秒就能响应，而不是非要等到整点
+                now = datetime.now()
+                if now > next_run_time:
+                    seconds_since_midnight = (
+                                now - now.replace(hour=0, minute=0, second=0, microsecond=0)).total_seconds()
+                    seconds_to_wait = interval - (seconds_since_midnight % interval)
+                    next_run_time = now + timedelta(seconds=seconds_to_wait)
 
-        except KeyboardInterrupt:
-            # 允许外部强制中断
-            break
         except Exception as e:
-            print(f"线程运行出错: {e}")
-            time.sleep(5) # 出错后稍微等待再重试，防止死循环刷报错
+            print(f"出错: {e}")
+            time.sleep(5)
