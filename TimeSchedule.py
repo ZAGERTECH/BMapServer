@@ -45,13 +45,11 @@ def traffic_monitor_task(taskConfig: TrafficTaskConfig):
 
     interval = taskConfig.interval_seconds
 
-    # 第一次启动时，对齐到整点 (例如 00, 05, 10 分) ---
-    # 这里的逻辑是：找到当前时间之后的第一个“整刻度”
+    # 首次基准计算
     now = datetime.now()
-    # 计算从当天0点开始过了多少秒
     seconds_since_midnight = (now - now.replace(hour=0, minute=0, second=0, microsecond=0)).total_seconds()
     # 计算距离下一个整刻度还要多久
-    seconds_to_wait = interval - (seconds_since_midnight % interval)
+    seconds_to_wait = (interval - (seconds_since_midnight % interval)) % interval
     # 设定刚性的下一次运行时间
     next_run_time = now + timedelta(seconds=seconds_to_wait)
 
@@ -59,46 +57,48 @@ def traffic_monitor_task(taskConfig: TrafficTaskConfig):
 
     while traffic_monitor_task_end_event.is_set():
         try:
-            # 检查是否在允许的时间段内
-            if is_current_in_schedule(taskConfig):
-
-
-                if current_worker_thread is not None and current_worker_thread.is_alive():
-                    print(f"警告：上一轮任务未结束")
-                else:
-                    # 启动线程...
-                    current_worker_thread = threading.Thread(target=TrafficManagerObj.task_query_all_segments,
-                                                             daemon=True)
-                    current_worker_thread.start()
-
-                # 无论当前耗时多久，强制在这个基准上加间隔
-                next_run_time += timedelta(seconds=interval)
-
-                # 倒计时逻辑
-                while True:
-                    now = datetime.now()
-                    sleep_seconds = (next_run_time - now).total_seconds()
-
-                    if sleep_seconds <= 0:
-                        break  # 时间到了，跳出等待循环，去执行任务
-
-                    # 打印倒计时并睡眠
-                    print(f"距离下一次调用({next_run_time.strftime('%H:%M:%S')})还有 {int(sleep_seconds)} 秒...",
-                          end='\n')
-                    # 动态睡眠：如果在最后1秒内，就睡得短一点，提高精度
-                    time.sleep(min(1, sleep_seconds))
-
-            else:
-                # 不在时段内，休眠并重新计算下一次整点
-                time.sleep(1)
-                # 重新对齐 next_run_time，确保进入时间段的第一秒就能响应，而不是非要等到整点
+            # 先等待，再执行
+            # 只有当时间到达 next_run_time 时，才跳出这个循环往下走
+            while True:
                 now = datetime.now()
-                if now > next_run_time:
-                    seconds_since_midnight = (
-                                now - now.replace(hour=0, minute=0, second=0, microsecond=0)).total_seconds()
-                    seconds_to_wait = interval - (seconds_since_midnight % interval)
-                    next_run_time = now + timedelta(seconds=seconds_to_wait)
+                sleep_seconds = (next_run_time - now).total_seconds()
+
+                if sleep_seconds <= 0:
+                    break  # 时间到了，跳出等待循环n
+                # 打印倒计时
+                if int(sleep_seconds) % 10 == 0:
+                    print(f"距离下一次调用({next_run_time.strftime('%H:%M:%S')})还有 {int(sleep_seconds)} 秒...",end='\n')
+                time.sleep(min(1, sleep_seconds))
+
+            # 时间到了，执行任务逻辑
+            if is_current_in_schedule(taskConfig):
+                if current_worker_thread is not None and current_worker_thread.is_alive():
+                    print(f"\n[{datetime.now().strftime('%H:%M:%S')}] 警告：上一轮任务尚未结束，跳过本次调度！")
+                else:
+                    print(f"\n[{datetime.now().strftime('%H:%M:%S')}] 启动子线程执行 API 查询...")
+                    current_worker_thread = threading.Thread(
+                        target=TrafficManagerObj.task_query_all_segments,
+                        daemon=True
+                    )
+                    current_worker_thread.start()
+            else:
+                # 不在时段内：什么都不做，直接跳过，准备计算下一次
+                print(f"\n[{datetime.now().strftime('%H:%M:%S')}] 当前不在运行时间段内，跳过。")
+                pass
+
+            # 设定下一次目标
+            # 无论刚才是否执行，都强制把目标推向下一个刻度 (例如 12:10:00)
+            next_run_time += timedelta(seconds=interval)
+
+            # 防滞后 (处理电脑休眠的情况)
+            # 如果 next_run_time 依然落后于当前时间超过一个周期，说明系统可能休眠过
+            if next_run_time < datetime.now() - timedelta(seconds=interval):
+                print("\n检测到时间严重滞后（可能由于系统休眠），重新对齐...")
+                now = datetime.now()
+                seconds_since_midnight = (now - now.replace(hour=0, minute=0, second=0, microsecond=0)).total_seconds()
+                seconds_to_wait = (interval - (seconds_since_midnight % interval)) % interval
+                next_run_time = now + timedelta(seconds=seconds_to_wait)
 
         except Exception as e:
-            print(f"出错: {e}")
-            time.sleep(5)
+            print(f"\n线程运行出错: {e}")
+            time.sleep(5)  # 出错后稍微等待再重试

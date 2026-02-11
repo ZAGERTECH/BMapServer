@@ -206,8 +206,6 @@ class TrafficManager:
                     result.traffic_status, result.jam_direction,
                     f"{result.speed:.2f}"
                 ])
-
-
             with open(self.log_filename, mode='a', encoding='utf-8') as f:
                 f.write(f"[{result.timestamp}] [ID:{result.seg_id}] TRAFFIC: {result.raw_json_traffic}\n")
                 f.write(f"[{result.timestamp}] [ID:{result.seg_id}] ROUTE:   {result.raw_json_route}\n")
@@ -221,14 +219,14 @@ class TrafficManager:
         Returns:
             RoutineBMapData: 返回当前轮询收集到的所有路段数据列表。
         """
-        now_str = datetime.now().strftime("%Y%m%d.%H%M%S")
-        print(f"\n[Cycle] 开始轮询 - {now_str}",end='\n')
+        now_str = datetime.now().strftime("%H:%M:%S")
+        print(f"[Cycle] 开始轮询 - {now_str}",end='\n')
 
         # 创建本轮数据的容器 (routine_bMap_data)
         current_routine_data: RoutineBMapData = []
 
         for seg in self.segments:
-            print(f"Processing Seg {seg.id}...", end='\n')
+            print(f"Processing[{now_str}] Seg {seg.id}...", end='\n')
 
             # 获取数据
             t_stat, j_drct, t_json = self.fetch_traffic_status(seg)

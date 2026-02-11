@@ -21,9 +21,9 @@ def main():
 if __name__ == '__main__':
 
     myConfig = TrafficTaskConfig(
-        start_time=dt_time(0, 0),
-        end_time=dt_time(23, 59),
-        interval_seconds=30,
+        start_time=dt_time(15, 0),
+        end_time=dt_time(21, 59),
+        interval_seconds=30, # 不宜低于30S
         segment_table_path="road_segment.csv")
 
     main()
