@@ -19,9 +19,9 @@ def get_latest_history_safe() -> List[RoutineBMapData]:
     """
     线程安全地获取当前全局历史数据的副本。
     供外部线程（如UI显示、数据分析）调用。
-    Args:
+    :param
         None
-    Returns:
+    :return
         List[RoutineBMapData]: 返回历史数据的浅拷贝列表。
                                如果无数据则返回空列表。
     """
@@ -42,10 +42,10 @@ class TrafficManager:
 
     def __init__(self, config_file: str, output_dir: str = "./data"):
         """初始化管理器，创建输出目录、加载配置。
-        Args:
+        :param
             config_file (str): CSV 配置文件路径。
             output_dir (str): 结果文件存储目录，默认为 "./data"。
-        Returns:
+        :return
             None
         """
         self.segments: List[RoadSegment] = []
@@ -67,9 +67,9 @@ class TrafficManager:
 
     def load_config(self, file_path: str) -> None:
         """从 CSV 文件加载路段配置信息到内存。
-        Args:
+        :param
             file_path (str): CSV 文件的完整路径。
-        Returns:
+        :return
             None
         """
         try:
@@ -89,15 +89,15 @@ class TrafficManager:
                         route_url=row['route_url']
                     )
                     self.segments.append(seg)
-            print(f"[System] 成功加载 {len(self.segments)} 条路段配置。")
+            print(f"成功加载 {len(self.segments)} 条路段配置。")
         except Exception as e:
             print(f"[Error] 加载配置文件失败: {e}")
 
     def init_csv_header(self) -> None:
         """初始化 CSV 结果文件的表头，若文件不存在则创建。
-        Args:
+        :param
             None
-        Returns:
+        :return
             None
         """
         if not os.path.exists(self.csv_filename):
@@ -107,9 +107,9 @@ class TrafficManager:
 
     def fetch_traffic_status(self, seg: RoadSegment) -> Tuple[int, int, str]:
         """调用百度 API 获取交通拥堵态势，并解析拥堵方向。
-        Args:
+        :param
             seg (RoadSegment): 当前要查询的路段对象。
-        Returns:
+        :return
             Tuple[int, int, str]: (拥堵等级, 拥堵方向, 原始JSON)。
         """
         retry_count = 0
@@ -156,9 +156,9 @@ class TrafficManager:
 
     def fetch_route_speed(self, seg: RoadSegment) -> Tuple[float, str]:
         """调用百度 API 获取路径规划数据，并计算平均车速。
-        Args:
+        :param:
             seg (RoadSegment): 当前要查询的路段对象。
-        Returns:
+        :return
             Tuple[float, str]: (车速km/h, 原始JSON)。
         """
         retry_count = 0
@@ -193,9 +193,9 @@ class TrafficManager:
 
     def save_result(self, result: TrafficResult) -> None:
         """将单次查询结果写入 CSV 和 JSON 日志文件。
-        Args:
+        :param
             result (TrafficResult): 包含查询结果的对象。
-        Returns:
+        :return
             None
         """
         try:
@@ -214,9 +214,9 @@ class TrafficManager:
 
     def task_query_all_segments(self) -> RoutineBMapData:
         """执行一次完整的轮询任务，遍历所有路段，保存数据，并更新内存中的历史容器。
-        Args:
+        :param
             None
-        Returns:
+        :return
             RoutineBMapData: 返回当前轮询收集到的所有路段数据列表。
         """
         now_str = datetime.now().strftime("%H:%M:%S")
