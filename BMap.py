@@ -156,7 +156,7 @@ class TrafficManager:
 
     def fetch_route_speed(self, seg: RoadSegment) -> Tuple[float, str]:
         """调用百度 API 获取路径规划数据，并计算平均车速。
-        :param:
+        :param seg:
             seg (RoadSegment): 当前要查询的路段对象。
         :return
             Tuple[float, str]: (车速km/h, 原始JSON)。
