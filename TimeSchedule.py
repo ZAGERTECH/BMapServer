@@ -1,8 +1,7 @@
 import threading
-from datetime import time, datetime, timedelta
 from dataclasses import dataclass
 import time
-from datetime import datetime, time as dt_time
+from datetime import datetime, timedelta, time as dt_time
 
 from BMap import TrafficManager
 
@@ -12,19 +11,21 @@ class TrafficTaskConfig:
     """
     任务配置结构体
     """
-    start_time: dt_time      # 开始时间 (例如 9:00)
-    end_time: dt_time        # 结束时间 (例如 18:00)
-    interval_seconds: int    # 时段内的轮询间隔 (秒)
+    start_time: dt_time      # 开始时间
+    end_time: dt_time        # 结束时间
+    interval_seconds: int    # 时段内的轮询间隔
     segment_table_path: str  # 路段数据文件路径
+    server_ip: str           # 服务器监听IP
+    server_port: int         # 服务器监听端口
 
 
 def is_current_in_schedule(config: TrafficTaskConfig) -> bool:
     """
     判断当前系统时间是否在配置的作业时间段内。
-    支持跨午夜的时间段配置（例如 23:00 到 02:00）。
-    Args:
-        config (TrafficTaskConfig): 包含 start_time 和 end_time 的配置对象。
-    Returns:
+    支持跨午夜的时间段配置。
+    :param
+        config: 包含 start_time 和 end_time 的配置对象。
+    :return
         bool:如果在时间段内返回 True，否则返回 False。
     """
     now_time = datetime.now().time()
@@ -40,6 +41,13 @@ traffic_monitor_task_end_event = threading.Event()
 
 
 def traffic_monitor_task(taskConfig: TrafficTaskConfig):
+    """
+    交通数据监控任务线程函数。
+    按照配置的时间段和间隔，定时启动子线程执行交通数据查询。
+    线程可通过 traffic_monitor_task_end_event 事件安全终止。
+    :param taskConfig: 任务配置对象，包含时间段和间隔信息。
+    :return:
+    """
     TrafficManagerObj = TrafficManager(config_file=taskConfig.segment_table_path)
     current_worker_thread = None
 
@@ -55,7 +63,7 @@ def traffic_monitor_task(taskConfig: TrafficTaskConfig):
 
     print(f"线程启动，首次对齐时间: {next_run_time.strftime('%H:%M:%S')}")
 
-    while traffic_monitor_task_end_event.is_set():
+    while not traffic_monitor_task_end_event.is_set():
         try:
             # 先等待，再执行
             # 只有当时间到达 next_run_time 时，才跳出这个循环往下走
@@ -87,10 +95,10 @@ def traffic_monitor_task(taskConfig: TrafficTaskConfig):
                 pass
 
             # 设定下一次目标
-            # 无论刚才是否执行，都强制把目标推向下一个刻度 (例如 12:10:00)
+            # 无论刚才是否执行，都强制把目标推向下一个刻度
             next_run_time += timedelta(seconds=interval)
 
-            # 防滞后 (处理电脑休眠的情况)
+            # 防滞后
             # 如果 next_run_time 依然落后于当前时间超过一个周期，说明系统可能休眠过
             if next_run_time < datetime.now() - timedelta(seconds=interval):
                 print("\n检测到时间严重滞后（可能由于系统休眠），重新对齐...")
