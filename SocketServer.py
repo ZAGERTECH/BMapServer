@@ -70,7 +70,7 @@ class TrafficTCPHandler(socketserver.StreamRequestHandler):
         try:
             while True:
                 # 读取数据
-                data = self.request.recv(409600)
+                data = self.request.recv(4096)
                 if not data:
                     break
 
