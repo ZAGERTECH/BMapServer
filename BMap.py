@@ -51,6 +51,11 @@ class TrafficManager:
         self.segments: List[RoadSegment] = []
         self.output_dir = output_dir
 
+        # 用于记录当前正在写入的日期
+        self.current_date = ""
+        self.csv_filename = ""
+        self.txt_filename = ""
+
         # 加载配置
         self.load_config(config_file)
 
@@ -58,12 +63,31 @@ class TrafficManager:
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
 
-        current_time_str = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        self.csv_filename = os.path.join(output_dir, f"{current_time_str}_Result.csv")
-        self.log_filename = os.path.join(output_dir, f"{current_time_str}_RawJson.txt")
+        # 初始化当天的文件
+        self.check_and_update_daily_files()
 
-        # 初始化 CSV 表头
-        self.init_csv_header()
+    def check_and_update_daily_files(self) -> None:
+        """
+        检查并更新每日存储文件路径。
+        如果是新的一天（或者程序刚启动），则创建新的按天命名的文件并初始化表头。
+        """
+        # 获取当前系统日期，格式如 "2026-03-01"
+        today_str = datetime.now().strftime("%Y-%m-%d")
+
+
+        # 如果当前记录的日期不是今天，说明跨天了或者程序刚启动
+        if self.current_date != today_str:
+            self.current_date = today_str
+
+            # 更新为按天命名的文件路径
+            self.csv_filename = os.path.join(self.output_dir, f"{today_str}_Result.csv")
+            self.txt_filename = os.path.join(self.output_dir, f"{today_str}_RawJson.txt")
+
+            print(f"[Info] 切换至数据文件: {self.csv_filename}")
+            print(f"[Info] 切换至日志文件: {self.txt_filename}")
+
+            # 切换文件时，确保新文件有CSV表头
+            self.init_csv_header()
 
     def load_config(self, file_path: str) -> None:
         """从 CSV 文件加载路段配置信息到内存。
@@ -206,7 +230,7 @@ class TrafficManager:
                     result.traffic_status, result.jam_direction,
                     f"{result.speed:.2f}"
                 ])
-            with open(self.log_filename, mode='a', encoding='utf-8') as f:
+            with open(self.txt_filename, mode='a', encoding='utf-8') as f:
                 f.write(f"[{result.timestamp}] [ID:{result.seg_id}] TRAFFIC: {result.raw_json_traffic}\n")
                 f.write(f"[{result.timestamp}] [ID:{result.seg_id}] ROUTE:   {result.raw_json_route}\n")
         except Exception as e:
@@ -219,8 +243,11 @@ class TrafficManager:
         :return
             RoutineBMapData: 返回当前轮询收集到的所有路段数据列表。
         """
+        # 每次轮询前，检查是否跨天。如果跨天，会自动切换并创建新文件
+        self.check_and_update_daily_files()
+
         now_str = datetime.now().strftime("%H:%M:%S")
-        print(f"[Cycle] 开始轮询 - {now_str}",end='\n')
+        print(f"[Cycle] 开始轮询 - {now_str}", end='\n')
 
         # 创建本轮数据的容器 (routine_bMap_data)
         current_routine_data: RoutineBMapData = []
@@ -251,14 +278,14 @@ class TrafficManager:
         with g_data_lock:
             g_history_data.append(current_routine_data)
 
+        # 添加轮询分隔空行
         try:
             with open(self.csv_filename, mode='a', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
                 writer.writerow([])
-            with open(self.log_filename, mode='a', encoding='utf-8') as f:
+            with open(self.txt_filename, mode='a', encoding='utf-8') as f:
                 f.write("\n")
         except Exception as e:
             print(f"[Error] 文件写入失败: {e}")
-
 
         return current_routine_data
