@@ -1,14 +1,15 @@
 """
 console_logger.py
 
-功能：
-1) 实时记录服务器控制台输出（stdout / stderr）。
-2) 按行写入 txt 文件，每行增加时间前缀：[YYYY-MM-DD HH:MM:SS] 内容
-3) 同时仍然输出到原控制台（不影响你原本在终端看到的输出）
+改进点：
+- 只要有输出就立刻追加写入 TXT（不等待程序结束；也不等待必须输出到换行才写）
+- 仍然按“行”加时间前缀：[YYYY-MM-DD HH:MM:SS]
+  具体策略：每行第一次写入时加前缀，之后同一行的后续片段不重复加前缀，
+           直到遇到 '\n' 才认为进入下一行。
 
-用法（建议在 main.py 一开始调用）：
+用法：
     from console_logger import install_console_logger
-    install_console_logger(log_dir="./logs")   # 或指定 log_file="xxx.txt"
+    install_console_logger(log_dir="./logs")
 """
 
 from __future__ import annotations
@@ -20,44 +21,52 @@ from datetime import datetime
 from typing import Optional, TextIO
 
 
-class _LinePrefixTee:
+class _RealtimeLinePrefixTee:
     """
-    将写入内容：
-    - 原样转发到原控制台流（stdout/stderr）
-    - 并按“行”写入日志文件，前缀时间戳
+    tee: 同时输出到控制台 + 文件。
+    realtime: 任何片段写入都立即落盘（flush）。
+    line-prefix: 每行只在“行首”加一次时间前缀。
     """
 
     def __init__(self, original_stream: TextIO, log_fp: TextIO, lock: threading.Lock):
         self._original = original_stream
         self._log_fp = log_fp
         self._lock = lock
-        self._buf = ""  # 用于缓存不完整的一行
+        self._at_line_start = True  # 当前是否处于“新的一行开头”
 
     def write(self, s: str) -> int:
-        # 1) 先照常输出到控制台（不改变体验）
+        # 1) 继续正常输出到控制台
         n = self._original.write(s)
         self._original.flush()
 
-        # 2) 再写入文件：按行加时间戳
         if not s:
             return n
 
+        # 2) 立刻写入文件（不等换行）
         with self._lock:
-            self._buf += s
-            while "\n" in self._buf:
-                line, self._buf = self._buf.split("\n", 1)
-                self._write_line_to_file(line)
+            i = 0
+            while i < len(s):
+                ch = s[i]
 
-            # 注意：这里不强制把没换行的 buf 写入文件
-            # 避免出现半行就落盘导致重复时间前缀。
+                # 如果在新行开头，先写时间前缀
+                if self._at_line_start:
+                    ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    self._log_fp.write(f"[{ts}] ")
+                    self._at_line_start = False
+
+                # 写入当前字符
+                self._log_fp.write(ch)
+
+                # 遇到换行：下一次写入应被视为新的一行
+                if ch == "\n":
+                    self._at_line_start = True
+
+                i += 1
+
+            # 强制刷新到磁盘，保证“有输出就写入”
             self._log_fp.flush()
 
         return n
-
-    def _write_line_to_file(self, line: str) -> None:
-        ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        # line 可能是空串（比如打印了一个纯换行），也要记录
-        self._log_fp.write(f"[{ts}] {line}\n")
 
     def flush(self) -> None:
         self._original.flush()
@@ -82,7 +91,7 @@ def install_console_logger(
     encoding: str = "utf-8",
 ) -> str:
     """
-    安装控制台输出捕获器：把 stdout（以及可选 stderr）写入 txt。
+    安装控制台输出捕获器：把 stdout（以及可选 stderr）实时写入 txt。
 
     参数：
       log_dir: 日志目录（当 log_file 未指定时使用）
@@ -100,18 +109,14 @@ def install_console_logger(
     else:
         os.makedirs(os.path.dirname(os.path.abspath(log_file)) or ".", exist_ok=True)
 
-    # 行级写入锁：避免多线程同时写导致行交错
     lock = threading.Lock()
+    log_fp = open(log_file, "a", encoding=encoding)
 
-    # line-buffered：尽量实时写入（但我们也会每次 write 后 flush）
-    log_fp = open(log_file, "a", encoding=encoding, buffering=1)
-
-    # 替换 sys.stdout / sys.stderr
-    sys.stdout = _LinePrefixTee(sys.stdout, log_fp, lock)  # type: ignore[assignment]
+    sys.stdout = _RealtimeLinePrefixTee(sys.stdout, log_fp, lock)  # type: ignore[assignment]
     if also_capture_stderr:
-        sys.stderr = _LinePrefixTee(sys.stderr, log_fp, lock)  # type: ignore[assignment]
+        sys.stderr = _RealtimeLinePrefixTee(sys.stderr, log_fp, lock)  # type: ignore[assignment]
 
-    # 记录一条启动信息（可删）
+    # 这条也会进日志
     print(f"Console logger installed. Logging to: {log_file}")
 
     return log_file
