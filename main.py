@@ -2,6 +2,11 @@ import threading
 from TimeSchedule import traffic_monitor_task, TrafficTaskConfig, traffic_monitor_task_end_event
 from datetime import time as dt_time
 from SocketServer import start_traffic_server
+from console_logger import install_console_logger
+
+install_console_logger(log_dir="./logs")  # 会生成 logs/2026-..._server_console.txt
+
+print("服务器启动...")
 
 def debug():
     print("Debugging BMapServer...")
