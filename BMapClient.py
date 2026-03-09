@@ -10,6 +10,7 @@ class BMapClient:
     """
 
     def __init__(self, host: str = "127.0.0.1", port: int = 8888, timeout: float = 10.0):
+        # 这里的默认值只是为了本地方便，不需要硬编码公网IP
         self.host = host
         self.port = port
         self.timeout = timeout
@@ -29,19 +30,34 @@ class BMapClient:
             self.sock = None
 
     def _send_request(self, request_dict: Dict[str, Any]) -> Dict[str, Any]:
-        """内部方法：发送 JSON 并解析返回结果"""
+        """改进后的方法：循环接收大数据量 JSON"""
         try:
             self.connect()
-            # 发送数据
+            # 1. 发送请求
             msg = json.dumps(request_dict).encode('utf-8')
             self.sock.sendall(msg)
 
-            # 接收返回 (4096 字节缓存)
-            response_data = self.sock.recv(4096)
-            if not response_data:
-                raise ConnectionError("Server closed connection without response.")
+            # 2. 循环接收数据
+            raw_data = b""
+            while True:
+                # 每次尝试读取 8KB
+                chunk = self.sock.recv(8192)
+                if not chunk:
+                    break
+                raw_data += chunk
 
-            return json.loads(response_data.decode('utf-8'))
+                # 简单的完整性校验：尝试解析。如果数据还没收完，json.loads 会报错，我们继续收。
+                try:
+                    decoded_str = raw_data.decode('utf-8')
+                    # 如果字符串以 { 开始并以 } 结束，尝试解析
+                    if decoded_str.strip().startswith('{') and decoded_str.strip().endswith('}'):
+                        return json.loads(decoded_str)
+                except (UnicodeDecodeError, json.JSONDecodeError):
+                    # 数据不完整或编码未完成，继续接收
+                    continue
+
+            return json.loads(raw_data.decode('utf-8'))
+
         except Exception as e:
             return {"code": 500, "success": False, "message": f"Client Error: {str(e)}", "data": None}
 
