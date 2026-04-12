@@ -50,7 +50,7 @@ jobs:
         
         # Use cmd /c to handle the redirection and directory change
         # -u ensures unbuffered output for real-time log monitoring
-        $cmd = "cmd.exe /c cd /d $workDir && $pythonPath -u SocketServer.py > run_info.log 2> run_error.log"
+        $cmd = "cmd.exe /c cd /d $workDir && $pythonPath -u main.py > run_info.log 2> run_error.log"
         
         Write-Host "Launching independent process via WMIC..."
         $process = ([wmiclass]"win32_process").Create($cmd, $workDir, $null)
